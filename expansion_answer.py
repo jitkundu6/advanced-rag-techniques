@@ -1,7 +1,7 @@
 from helper_utils import project_embeddings, word_wrap
 from pypdf import PdfReader
 import os
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 from dotenv import load_dotenv
 
 from pypdf import PdfReader
@@ -12,7 +12,16 @@ import umap
 load_dotenv()
 
 openai_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=openai_key)
+openai_api_base = os.getenv("OPENAI_API_BASE")
+# client = OpenAI(api_key=openai_key)
+client = AzureOpenAI(
+    api_key=openai_key,
+    api_version="2025-01-01-preview",
+    azure_endpoint=openai_api_base,
+)
+# model="gpt-3.5-turbo"
+model="gpt-4.1"
+
 
 reader = PdfReader("data/microsoft-annual-report.pdf")
 pdf_texts = [p.extract_text().strip() for p in reader.pages]
@@ -29,7 +38,7 @@ pdf_texts = [text for text in pdf_texts if text]
 # split the text into smaller chunks
 
 
-from langchain.text_splitter import (
+from langchain.text_splitter import ( #TODO understand all types
     RecursiveCharacterTextSplitter,
     SentenceTransformersTokenTextSplitter,
 )
@@ -72,15 +81,15 @@ chroma_collection.count()
 query = "What was the total revenue for the year?"
 
 
-results = chroma_collection.query(query_texts=[query], n_results=5)
+results = chroma_collection.query(query_texts=[query], n_results=5, include=["documents", "embeddings"])
 retrieved_documents = results["documents"][0]
-
+basic_retrieved_embeddings = results["embeddings"][0]
 # for document in retrieved_documents:
 #     print(word_wrap(document))
 #     print("\n")
 
 
-def augment_query_generated(query, model="gpt-3.5-turbo"):
+def augment_query_generated(query, model=model):
     prompt = """You are a helpful expert financial research assistant. 
    Provide an example answer to the given question, that might be found in a document like an annual report."""
     messages = [
@@ -133,6 +142,9 @@ projected_augmented_query_embedding = project_embeddings(
 projected_retrieved_embeddings = project_embeddings(
     retrieved_embeddings, umap_transform
 )
+projected_basic_retrieved_embeddings = project_embeddings(
+    basic_retrieved_embeddings, umap_transform
+)
 
 import matplotlib.pyplot as plt
 
@@ -153,6 +165,13 @@ plt.scatter(
     edgecolors="g",
 )
 plt.scatter(
+    projected_basic_retrieved_embeddings[:, 0],
+    projected_basic_retrieved_embeddings[:, 1],
+    s=150,
+    facecolors="none",
+    edgecolors="blue",
+)
+plt.scatter(
     projected_original_query_embedding[:, 0],
     projected_original_query_embedding[:, 1],
     s=150,
@@ -171,3 +190,4 @@ plt.gca().set_aspect("equal", "datalim")
 plt.title(f"{original_query}")
 plt.axis("off")
 plt.show()  # display the plot
+plt.savefig("plot.png")
